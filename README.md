@@ -48,3 +48,5 @@ The system is built on a three-tier logic:
 Find the top 5 words most similar to "Bravery" based on current learning weights:
 ```sql
 SELECT knn_evolved_w('bravery', 5);
+
+Created by Giuseppe D'Ambrosio - Claudia Covucci
