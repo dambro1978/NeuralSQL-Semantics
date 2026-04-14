@@ -446,3 +446,90 @@ FROM words w1
 JOIN words w2 
 ON w1.etymology_id = w2.etymology_id
 WHERE w1.id != w2.id;
+
+
+CREATE TABLE neuron_state (
+    word_id INT PRIMARY KEY,
+    activation DECIMAL(10,6) DEFAULT 0,
+    bias DECIMAL(10,6) DEFAULT 0,
+    FOREIGN KEY (word_id) REFERENCES words(id)
+);
+--UPDATE neuron_state ns
+--JOIN words w ON w.id = ns.word_id
+--SET ns.activation = 1.0
+--WHERE w.word IN ('cliente', 'attivo');
+
+
+
+UPDATE neuron_state ns_target
+JOIN (
+    SELECT 
+        ws2.word_id AS target_id,
+        SUM(ns.activation * lw.weight) AS new_activation
+    FROM neuron_state ns
+    JOIN word_scenario ws1 ON ws1.word_id = ns.word_id
+    JOIN word_scenario ws2 ON ws1.scenario_id = ws2.scenario_id
+    JOIN learning_weights lw ON lw.feature = 'scenario'
+    GROUP BY ws2.word_id
+) calc ON ns_target.word_id = calc.target_id
+SET ns_target.activation = ns_target.activation + calc.new_activation;
+
+
+
+UPDATE neuron_state ns
+JOIN (
+    SELECT word_id, SUM(score) AS total
+    FROM (
+
+        -- etymology
+        SELECT w2.id AS word_id, lw.weight * ns.activation AS score
+        FROM neuron_state ns
+        JOIN words w1 ON w1.id = ns.word_id
+        JOIN words w2 ON w1.etymology_id = w2.etymology_id
+        JOIN learning_weights lw ON lw.feature = 'etymology'
+
+        UNION ALL
+
+        -- scenario
+        SELECT ws2.word_id, lw.weight * ns.activation
+        FROM neuron_state ns
+        JOIN word_scenario ws1 ON ws1.word_id = ns.word_id
+        JOIN word_scenario ws2 ON ws1.scenario_id = ws2.scenario_id
+        JOIN learning_weights lw ON lw.feature = 'scenario'
+
+        UNION ALL
+
+        -- synonyms
+        SELECT s.synonym_word_id, lw.weight * ns.activation
+        FROM neuron_state ns
+        JOIN word_synonyms s ON s.word_id = ns.word_id
+        JOIN learning_weights lw ON lw.feature = 'synonym'
+
+    ) t
+    GROUP BY word_id
+) agg ON ns.word_id = agg.word_id
+SET ns.activation = agg.total;
+
+
+
+UPDATE neuron_state
+SET activation = 1 / (1 + EXP(-activation));
+
+
+
+
+CREATE TABLE neuron_error (
+    word_id INT,
+    error DECIMAL(10,6)
+);
+
+
+UPDATE neuron_error ne
+JOIN neuron_state ns ON ns.word_id = ne.word_id
+SET ne.error = ns.activation - expected;
+
+
+UPDATE learning_weights
+SET weight = weight - 0.01 * (
+    SELECT AVG(error) FROM neuron_error
+);
