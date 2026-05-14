@@ -43,7 +43,7 @@ The system is built on a three-tier logic:
 ---
 
 ## 🔍 Usage Examples
-
+#
 ### 1. Similarity Search (KNN)
 Find the top 5 words most similar to "Bravery" based on current learning weights:
 ```sql
